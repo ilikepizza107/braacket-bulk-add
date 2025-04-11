@@ -16,7 +16,7 @@ async function login(page, credentials) {
   try {
     await Promise.all([
         page.click('button[type=submit]'),
-        page.waitForNavigation(),
+        page.waitForNavigation({ timeout: 60000, waitUntil: 'networkidle0' }),
     ]);
   } catch (e) {
     return false;
@@ -32,7 +32,7 @@ function challongeId(url) {
   return {subdomain: match[1], id: match[2]};
 }
 
-function smashGgId(url) {
+function startGgId(url) {
   const match = url.match('/tournament/([^/]+)/events/([^/]+)');
   return {
     id: match[1],
@@ -49,9 +49,9 @@ async function addTournament(page, league, url) {
     if (tournament.subdomain) {
       await page.type('#organization_id', tournament.subdomain);
     }
-  } else if (url.includes('smash.gg')) {
-    await page.goto(`https://braacket.com/tournament/import/smashgg?league=${league}`);
-    const tournament = smashGgId(url);
+  } else if (url.includes('start.gg')) {
+    await page.goto(`https://braacket.com/tournament/import/startgg?league=${league}`);
+    const tournament = startGgId(url);
     await page.type('#tournament', tournament.id);
     await page.type('#event', tournament.event);
   } else {
@@ -65,13 +65,13 @@ async function addTournament(page, league, url) {
 
   await Promise.all([
       page.click('button[data-redirect_value="league_player_import"]'),
-      page.waitForNavigation(),
+      page.waitForNavigation({ timeout: 60000, waitUntil: 'networkidle0' }),
   ]);
 
   // Increase pagination size.
   await Promise.all([
     page.select('select#search-row_numbers', '200'),
-    page.waitForNavigation(),
+    page.waitForNavigation({ timeout: 60000, waitUntil: 'networkidle0' }),
   ]);
 
   // Import all players into the league.
@@ -87,14 +87,14 @@ async function addTournament(page, league, url) {
 
     await Promise.all([
       next.click(),
-      page.waitForNavigation(),
+      page.waitForNavigation({ timeout: 60000, waitUntil: 'networkidle0' }),
     ]);
   }
 
   // Save changes.
   await Promise.all([
       page.click('button[data-redirect_value="default"]'),
-      page.waitForNavigation(),
+      page.waitForNavigation({ timeout: 60000, waitUntil: 'networkidle0' }),
   ]);
 }
 
