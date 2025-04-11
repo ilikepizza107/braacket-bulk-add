@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+const config = require('config');
+const fs = require('fs');
+const process = require('process');
+const puppeteer = require('puppeteer');
+
+async function login(page, credentials) {
+  // Bring up login modal.
+  const loginLinks = await page.$$('a[data-target="#login_modal"]');
+  await loginLinks[1].click();
+  await page.waitForSelector('#login_modal', {visible: true});
+
+  await page.type('#username', credentials.username);
+  await page.type('#password', credentials.password);
+
+  try {
+    await Promise.all([
+        page.click('button[type=submit]'),
+        page.waitForNavigation({ timeout: 60000, waitUntil: 'networkidle0' }),
+    ]);
+  } catch (e) {
+    return false;
+  }
+
+  return true;
+}
+
+function challongeId(url) {
+  const re = /(\w+)?\.?challonge\.com\/([^/]+)/g;
+  const match = re.exec(url);
+
+  return {subdomain: match[1], id: match[2]};
+}
+
+function startGgId(url) {
+  const match = url.match('/tournament/([^/]+)/events/([^/]+)');
+  return {
+    id: match[1],
+    event: match[2],
+  };
+}
+
+async function addTournament(page, league, url) {
+  if (url.includes('challonge.com')) {
+    await page.goto(`https://braacket.com/tournament/import/challonge?league=${league}`);
+    const tournament = challongeId(url);
+    await page.type('#tournament', tournament.id);
+
+    if (tournament.subdomain) {
+      await page.type('#organization_id', tournament.subdomain);
+    }
+  } else if (url.includes('start.gg')) {
+    await page.goto(`https://braacket.com/tournament/import/startgg?league=${league}`);
+    const tournament = startGgId(url);
+    await page.type('#tournament', tournament.id);
+    await page.type('#event', tournament.event);
+  } else {
+    console.log(`Invalid tournament: ${url}`);
+    return;
+  }
+
+  // Set relevant settings.
+  await page.click('#exclude_dq');
+  await page.click('#exclude_draw');
+  await page.click('#admin_league_inherit');
+  
+  // Save changes.
+  await Promise.all([
+      page.click('button[data-redirect_value="default"]'),
+      page.waitForNavigation({ timeout: 60000, waitUntil: 'networkidle0' }),
+  ]);
+}
+
+// This is bad, but that's ok.
+const tournamentUrls = fs.readFileSync(process.argv[2]).toString().match(/^.+$/gm);
+
+(async () => {
+  const credentials = config.get('credentials');
+
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.goto('https://braacket.com');
+
+  const success = await login(page, credentials);
+
+  if (!success) {
+    console.log('Login failed. Incorrect credentials?');
+    process.exit(1);
+  }
+
+  for (const url of tournamentUrls) {
+    console.log(`Adding: ${url}`);
+    await addTournament(page, credentials.league, url);
+  }
+
+  await browser.close();
+})();
